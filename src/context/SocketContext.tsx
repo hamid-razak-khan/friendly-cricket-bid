@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 // For now, we'll use a mock socket connection
 // In production, you would connect to your actual server
 const SOCKET_URL = 'http://localhost:5000';
+const USE_MOCK_SOCKET = true; // Set to true to use mock socket by default
 
 interface SocketContextType {
   socket: Socket | null;
@@ -25,6 +26,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isConnected, setIsConnected] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [useMockSocket, setUseMockSocket] = useState(USE_MOCK_SOCKET);
 
   const connectSocket = () => {
     if (!isAuthenticated || !user) return;
@@ -32,6 +35,19 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Disconnect any existing socket
     if (socket) {
       socket.disconnect();
+    }
+
+    // Use mock socket if real connection fails or mock mode is enabled
+    if (useMockSocket) {
+      console.log("Using mock socket connection");
+      const mockSocket = createMockSocket();
+      setSocket(mockSocket as unknown as Socket);
+      setIsConnected(true);
+      toast({
+        title: "Simulated Connection",
+        description: "Using simulated auction mode (no server required)."
+      });
+      return;
     }
 
     // Create a new socket connection
@@ -58,24 +74,36 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     socketConnection.on('connect_error', (err) => {
       console.error('Connection error:', err);
-      toast({
-        title: "Connection error",
-        description: "Failed to connect to the auction server. Using simulated mode.",
-        variant: "destructive"
-      });
       
-      // For demo purposes, let's simulate connection anyway
-      setIsConnected(true);
+      // After repeated attempts, switch to mock socket
+      setConnectionAttempts(prev => {
+        const newCount = prev + 1;
+        if (newCount >= 2) {
+          // Switch to mock socket mode after 2 attempts
+          setUseMockSocket(true);
+          toast({
+            title: "Simulated Mode Activated",
+            description: "Using simulated auction mode (no server required)."
+          });
+        } else {
+          toast({
+            title: "Connection error",
+            description: "Failed to connect to the auction server. Trying simulated mode.",
+            variant: "destructive"
+          });
+        }
+        return newCount;
+      });
     });
 
     setSocket(socketConnection);
-
-    return () => {
-      socketConnection.disconnect();
-    };
   };
 
   const reconnect = () => {
+    // Reset connection attempts and try again
+    setConnectionAttempts(0);
+    setUseMockSocket(false);
+    
     if (socket) {
       socket.disconnect();
     }
@@ -116,6 +144,13 @@ export const createMockSocket = () => {
         events[event] = [];
       }
       events[event].push(callback);
+      return {
+        off: () => {
+          if (events[event]) {
+            events[event] = events[event].filter(cb => cb !== callback);
+          }
+        }
+      };
     },
     emit: (event: string, data: any) => {
       setTimeout(() => {
@@ -123,6 +158,13 @@ export const createMockSocket = () => {
           events[event].forEach(callback => callback(data));
         }
       }, 100);
+    },
+    off: (event: string, callback?: (data: any) => void) => {
+      if (!callback) {
+        delete events[event];
+      } else if (events[event]) {
+        events[event] = events[event].filter(cb => cb !== callback);
+      }
     },
     disconnect: () => {
       // Mock disconnect
