@@ -68,8 +68,7 @@ const TeamBudget: React.FC<TeamBudgetProps> = ({ totalBudget, remainingBudget, s
             </div>
             <Progress 
               value={spentPercentage} 
-              className="h-2" 
-              indicatorClassName={getProgressColor()}
+              className={`h-2 ${getProgressColor()}`}
             />
           </div>
         </div>

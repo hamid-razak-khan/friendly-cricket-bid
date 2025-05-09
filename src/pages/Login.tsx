@@ -3,19 +3,30 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
+import { useToast } from "@/components/ui/use-toast";
 
 const Login = () => {
   const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleLogin = async (username: string, password: string) => {
     setIsLoading(true);
     try {
       await login(username, password);
+      toast({
+        title: "Login successful",
+        description: "Welcome back to Cricket Auction!",
+      });
       navigate('/');
     } catch (error) {
       console.error('Login error:', error);
+      toast({
+        title: "Login failed",
+        description: "Invalid username or password. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }

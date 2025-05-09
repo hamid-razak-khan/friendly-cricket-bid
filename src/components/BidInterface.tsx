@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Minus } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
 interface BidInterfaceProps {
@@ -14,6 +14,7 @@ interface BidInterfaceProps {
   onPlaceBid: (amount: number) => void;
   disabled?: boolean;
   teamBudget: number;
+  playerId: string;
 }
 
 const BidInterface: React.FC<BidInterfaceProps> = ({ 
@@ -21,15 +22,39 @@ const BidInterface: React.FC<BidInterfaceProps> = ({
   minIncrement, 
   onPlaceBid,
   disabled = false,
-  teamBudget
+  teamBudget,
+  playerId
 }) => {
   const [customBid, setCustomBid] = useState<number | ''>('');
   const { toast } = useToast();
-
+  const { socket, isConnected } = useSocket();
+  const { user } = useAuth();
+  
   // Calculate next standard bid amounts
   const nextBid = currentBid + minIncrement;
   const nextPlus = currentBid + (minIncrement * 2);
   const nextBig = currentBid + (minIncrement * 5);
+
+  // Effect to listen for remote bids
+  useEffect(() => {
+    if (socket && playerId) {
+      const handleRemoteBid = (bidData: { amount: number; teamName: string }) => {
+        // If someone else placed a bid, we'll get notified here
+        if (bidData.teamName !== user?.teamName) {
+          toast({
+            title: "New bid placed!",
+            description: `${bidData.teamName} bid ${formatCurrency(bidData.amount)}`,
+          });
+        }
+      };
+
+      socket.on(`bid-placed-${playerId}`, handleRemoteBid);
+      
+      return () => {
+        socket.off(`bid-placed-${playerId}`);
+      };
+    }
+  }, [socket, playerId, user?.teamName]);
 
   const handleBid = (amount: number) => {
     if (amount > teamBudget) {
@@ -39,6 +64,15 @@ const BidInterface: React.FC<BidInterfaceProps> = ({
         variant: "destructive"
       });
       return;
+    }
+    
+    // Emit bid to server if connected
+    if (socket && isConnected && user?.teamName && playerId) {
+      socket.emit('place-bid', {
+        playerId,
+        amount,
+        teamName: user.teamName
+      });
     }
     
     onPlaceBid(amount);
@@ -132,6 +166,12 @@ const BidInterface: React.FC<BidInterfaceProps> = ({
           <span>Current Bid: <span className="font-semibold">{formatCurrency(currentBid)}</span></span>
           <span>Min Increment: <span className="font-semibold">{formatCurrency(minIncrement)}</span></span>
         </div>
+        
+        {!isConnected && (
+          <div className="text-xs text-amber-600 mt-1 text-center">
+            Using offline mode - some features may be limited
+          </div>
+        )}
       </div>
     </Card>
   );

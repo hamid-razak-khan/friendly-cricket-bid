@@ -1,18 +1,44 @@
 
 import React, { useState, useEffect } from 'react';
+import { useSocket } from '../context/SocketContext';
 
 interface AuctionTimerProps {
   durationSeconds: number;
   onTimeUp: () => void;
   isRunning: boolean;
+  playerId?: string; // Optional player ID for server sync
 }
 
-const AuctionTimer: React.FC<AuctionTimerProps> = ({ durationSeconds, onTimeUp, isRunning }) => {
+const AuctionTimer: React.FC<AuctionTimerProps> = ({ 
+  durationSeconds, 
+  onTimeUp, 
+  isRunning,
+  playerId
+}) => {
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
+  const { socket, isConnected } = useSocket();
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
+    let isMounted = true;
 
+    // Listen for server timer updates if connected
+    if (isConnected && socket && playerId) {
+      socket.on(`timer-update-${playerId}`, (serverTimeLeft: number) => {
+        if (isMounted) {
+          setTimeLeft(serverTimeLeft);
+        }
+      });
+
+      socket.on(`timer-complete-${playerId}`, () => {
+        if (isMounted) {
+          setTimeLeft(0);
+          onTimeUp();
+        }
+      });
+    }
+
+    // Local timer as fallback or if not connected to server
     if (isRunning && timeLeft > 0) {
       timer = setInterval(() => {
         setTimeLeft(prevTime => {
@@ -29,9 +55,14 @@ const AuctionTimer: React.FC<AuctionTimerProps> = ({ durationSeconds, onTimeUp, 
     }
 
     return () => {
+      isMounted = false;
       if (timer) clearInterval(timer);
+      if (socket && playerId) {
+        socket.off(`timer-update-${playerId}`);
+        socket.off(`timer-complete-${playerId}`);
+      }
     };
-  }, [isRunning, timeLeft, onTimeUp]);
+  }, [isRunning, timeLeft, onTimeUp, socket, isConnected, playerId]);
 
   // Reset timer when duration changes (e.g., new player or bid)
   useEffect(() => {
@@ -52,6 +83,12 @@ const AuctionTimer: React.FC<AuctionTimerProps> = ({ durationSeconds, onTimeUp, 
     return 'text-cricket-green';
   };
 
+  const getProgressColor = (): string => {
+    if (timeLeft <= 5) return 'bg-cricket-red';
+    if (timeLeft <= 15) return 'bg-cricket-gold';
+    return 'bg-cricket-green';
+  };
+
   return (
     <div className="flex flex-col items-center space-y-2">
       <div className="text-sm font-medium">Time Remaining</div>
@@ -60,10 +97,16 @@ const AuctionTimer: React.FC<AuctionTimerProps> = ({ durationSeconds, onTimeUp, 
       </div>
       <div className="w-full bg-gray-200 rounded-full h-2">
         <div 
-          className={`h-2 rounded-full ${getTimerColor().replace('text-', 'bg-')}`}
+          className={`h-2 rounded-full ${getProgressColor()}`}
           style={{ width: `${(timeLeft / durationSeconds) * 100}%` }}
         ></div>
       </div>
+      
+      {!isConnected && (
+        <div className="text-xs text-gray-500 mt-1">
+          Using local timer (server disconnected)
+        </div>
+      )}
     </div>
   );
 };
