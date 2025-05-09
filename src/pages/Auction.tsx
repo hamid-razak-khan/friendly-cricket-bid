@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
@@ -277,6 +276,7 @@ const Auction = () => {
                 durationSeconds={30} 
                 onTimeUp={handleTimerComplete} 
                 isRunning={timerRunning && auctionStatus === 'in-progress'}
+                playerId={currentPlayer.id} // Pass the current player ID to the timer
               />
             </Card>
           </div>
@@ -289,6 +289,7 @@ const Auction = () => {
               onPlaceBid={handlePlaceBid}
               disabled={auctionStatus !== 'in-progress' || highestBidder === user?.teamName}
               teamBudget={remainingBudget}
+              playerId={currentPlayer.id} // Add the missing playerId prop
             />
           </div>
         </div>
